@@ -1,0 +1,8 @@
+{
+  "name": "jquery-cron",
+  "version": "1.0.0",
+  "main": "cron/jquery-cron-min.js",
+  "repository": "git@github.com:jomarquez21/jquery-cron.git",
+  "author": "Jose Enrique Marquez <jmrqz21@gmail.com>",
+  "license": "MIT"
+}
