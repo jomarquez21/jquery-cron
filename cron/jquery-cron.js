@@ -46,6 +46,7 @@
             itemWidth : 30,
             columns   : 4,
             rows      : undefined,
+            disallowEmpty : true,
             title     : "Minutes Past the Hour"
         },
         timeHourOpts : {
@@ -53,6 +54,7 @@
             itemWidth : 20,
             columns   : 2,
             rows      : undefined,
+            disallowEmpty : true,
             title     : "Time: Hour"
         },
         domOpts : {
@@ -60,6 +62,7 @@
             itemWidth : 30,
             columns   : undefined,
             rows      : 10,
+            disallowEmpty : true,
             title     : "Day of Month"
         },
         monthOpts : {
@@ -67,6 +70,7 @@
             itemWidth : 100,
             columns   : 2,
             rows      : undefined,
+            disallowEmpty : true,
             title     : undefined
         },
         dowOpts : {
@@ -74,6 +78,7 @@
             itemWidth : undefined,
             columns   : undefined,
             rows      : undefined,
+            disallowEmpty : true,
             title     : undefined
         },
         timeMinuteOpts : {
@@ -81,6 +86,7 @@
             itemWidth : 20,
             columns   : 4,
             rows      : undefined,
+            disallowEmpty : true,
             title     : "Time: Minute"
         },
         effectOpts : {
@@ -92,6 +98,13 @@
         },
         url_set : undefined,
         customValues : undefined,
+        allowMultiple_all : false,
+        allowMultiple_dom : false,
+        allowMultiple_month : false,
+        allowMultiple_dow : false,
+        allowMultiple_minute : false,
+        allowMultiple_timeHour : false,
+        allowMultiple_timeMinute : false,
         onChange: undefined, // callback function each time value changes
         useGentleSelect: false
     };
@@ -157,12 +170,12 @@
     };
 
     var combinations = {
-        "minute" : /^(\*\s){4}\*$/,                    // "* * * * *"
-        "hour"   : /^\d{1,2}\s(\*\s){3}\*$/,           // "? * * * *"
-        "day"    : /^(\d{1,2}\s){2}(\*\s){2}\*$/,      // "? ? * * *"
-        "week"   : /^(\d{1,2}\s){2}(\*\s){2}\d{1,2}$/, // "? ? * * ?"
-        "month"  : /^(\d{1,2}\s){3}\*\s\*$/,           // "? ? ? * *"
-        "year"   : /^(\d{1,2}\s){4}\*$/                // "? ? ? ? *"
+        "minute" : /^(\*\s){4}\*$/,                   // "* * * * *"
+        "hour"   : /^[\d,]+\s(\*\s){3}\*$/,           // "? * * * *"
+        "day"    : /^([\d,]+\s){2}(\*\s){2}\*$/,      // "? ? * * *"
+        "week"   : /^([\d,]+\s){2}(\*\s){2}[\d,]+$/,  // "? ? * * ?"
+        "month"  : /^([\d,]+\s){3}\*\s\*$/,           // "? ? ? * *"
+        "year"   : /^([\d,]+\s){4}\*$/                // "? ? ? ? *"
     };
 
     // ------------------ internal functions ---------------
@@ -184,7 +197,7 @@
         }
 
         // check format of initial cron value
-        var valid_cron = /^((\d{1,2}|\*)\s){4}(\d{1,2}|\*)$/
+        var valid_cron = /^(([\d,]+|\*) +){4}([\d,]+|\*)$/;
         if (typeof cron_str != "string" || !valid_cron.test(cron_str)) {
             $.error("cron: invalid initial value");
             return undefined;
@@ -192,21 +205,55 @@
 
         // check actual cron values
         var d = cron_str.split(" ");
+        if (d.length != 5) {
+            $.error("cron: invalid initial value");
+            return undefined;
+        }
+        
         //            mm, hh, DD, MM, DOW
         var minval = [ 0,  0,  1,  1,  0];
         var maxval = [59, 23, 31, 12,  6];
+
+        // which fields support multiple values?
+        var mulval = [
+            o.allowMultiple_all || o.allowMultiple_timeMinute || o.allowMultiple_minute,
+            o.allowMultiple_all || o.allowMultiple_timeHour,
+            o.allowMultiple_all || o.allowMultiple_dom,
+            o.allowMultiple_all || o.allowMultiple_month,
+            o.allowMultiple_all || o.allowMultiple_dow
+        ];
+
         for (var i = 0; i < d.length; i++) {
             if (d[i] == "*") continue;
-            var v = parseInt(d[i]);
-            if (defined(v) && v <= maxval[i] && v >= minval[i]) continue;
-
-            $.error("cron: invalid value found (col "+(i+1)+") in " + o.initial);
-            return undefined;
+            var v = d[i].split(",").map(function(x) { return parseInt(x, 10); });
+            if (!mulval[i] && v.length > 1) {  // multi-value support
+                $.error("cron: unexpected multi-value cron entry");
+                return undefined;
+            }
+            
+            // check that each value is within bounds
+            $.each(v, function(idx, val) {
+                if (!defined(val) || val < minval[i] || val > maxval[i]) {
+                    $.error("cron: invalid cron value (column "+i+")");
+                    return undefined;
+                }
+            });
         }
 
         // determine combination
         for (var t in combinations) {
-            if (combinations[t].test(cron_str)) { return t; }
+            if (combinations[t].test(cron_str)) { 
+                if (d[0].indexOf(",") >= 0) { // multi-val minute
+                    // when t == "hour", minutes refer to minutes past the hour
+                    // else, minutes refer to timeMinute
+                    if ((t == "hour" && !o.allowMultiple_minute) 
+                        || (t != "hour" && !o.allowMultiple_timeMinute)) {
+                        $.error("cron: unexpected multi-value cron entry");
+                        return undefined;
+                    }
+                }
+                return t; 
+            }
         }
 
         // unknown combination
@@ -316,8 +363,13 @@
                   .data("root", this);
             if (o.useGentleSelect) select.gentleSelect(eo);
 
+            // should we allow multiple entries by default?
+            var m_enable = " multiple='multiple'";
+            var m_def = (o.allowMultiple_all) ? m_enable : "";
+
+            var mul = (o.allowMultiple_dom) ? m_enable : m_def;
             block["dom"] = $("<span class='cron-block cron-block-dom'>"
-                    + " on the <select name='cron-dom'>" + str_opt_dom
+                    + " on the <select name='cron-dom'" + mul + ">" + str_opt_dom
                     + "</select> </span>")
                 .appendTo(this)
                 .data("root", this);
@@ -325,8 +377,9 @@
             select = block["dom"].find("select").data("root", this);
             if (o.useGentleSelect) select.gentleSelect(o.domOpts);
 
+            mul = (o.allowMultiple_month) ? m_enable : m_def;
             block["month"] = $("<span class='cron-block cron-block-month'>"
-                    + " of <select name='cron-month'>" + str_opt_month
+                    + " of <select name='cron-month'" + mul + ">" + str_opt_month
                     + "</select> </span>")
                 .appendTo(this)
                 .data("root", this);
@@ -334,8 +387,9 @@
             select = block["month"].find("select").data("root", this);
             if (o.useGentleSelect) select.gentleSelect(o.monthOpts);
 
+            mul = (o.allowMultiple_minute) ? m_enable : m_def;
             block["mins"] = $("<span class='cron-block cron-block-mins'>"
-                    + " at <select name='cron-mins'>" + str_opt_mih
+                    + " at <select name='cron-mins'" + mul + ">" + str_opt_mih
                     + "</select> minutes past the hour </span>")
                 .appendTo(this)
                 .data("root", this);
@@ -343,8 +397,9 @@
             select = block["mins"].find("select").data("root", this);
             if (o.useGentleSelect) select.gentleSelect(o.minuteOpts);
 
+            mul = (o.allowMultiple_dow) ? m_enable : m_def;
             block["dow"] = $("<span class='cron-block cron-block-dow'>"
-                    + " on <select name='cron-dow'>" + str_opt_dow
+                    + " on <select name='cron-dow'" + mul + ">" + str_opt_dow
                     + "</select> </span>")
                 .appendTo(this)
                 .data("root", this);
@@ -352,9 +407,11 @@
             select = block["dow"].find("select").data("root", this);
             if (o.useGentleSelect) select.gentleSelect(o.dowOpts);
 
+            mul = (o.allowMultiple_timeHour) ? m_enable : m_def;
+            var mul_m = (o.allowMultiple_timeMinute) ? m_enable : m_def;
             block["time"] = $("<span class='cron-block cron-block-time'>"
-                    + " at <select name='cron-time-hour' class='cron-time-hour'>" + str_opt_hid
-                    + "</select>:<select name='cron-time-min' class='cron-time-min'>" + str_opt_mih
+                    + " at <select name='cron-time-hour' class='cron-time-hour'" + mul + ">" + str_opt_hid
+                    + "</select>:<select name='cron-time-min' class='cron-time-min'" + mul_m + ">" + str_opt_mih
                     + " </span>")
                 .appendTo(this)
                 .data("root", this);
@@ -396,6 +453,11 @@
                 t = o.customValues[t];
             } else {
                 var d = cron_str.split(" ");
+                var d = cron_str.split(" ").map(function(x) {
+                    var vals = x.split(",");
+                    return (vals.length == 1) ? vals[0] : vals;
+                });
+
                 var v = {
                     "mins"  : d[0],
                     "hour"  : d[1],
@@ -414,7 +476,7 @@
 
                         btgt = block[tgt].find("select.cron-time-min").val(v["mins"]);
                         if (useGentleSelect) btgt.gentleSelect("update");
-                    } else {;
+                    } else {
                         var btgt = block[tgt].find("select").val(v[tgt]);
                         if (useGentleSelect) btgt.gentleSelect("update");
                     }
