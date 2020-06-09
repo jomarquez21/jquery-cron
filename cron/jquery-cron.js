@@ -216,11 +216,11 @@
 
         // which fields support multiple values?
         var mulval = [
-            o.allowMultiple_all || o.allowMultiple_timeMinute || o.allowMultiple_minute,
-            o.allowMultiple_all || o.allowMultiple_timeHour,
-            o.allowMultiple_all || o.allowMultiple_dom,
-            o.allowMultiple_all || o.allowMultiple_month,
-            o.allowMultiple_all || o.allowMultiple_dow
+            opts.allowMultiple_all || opts.allowMultiple_timeMinute || opts.allowMultiple_minute,
+            opts.allowMultiple_all || opts.allowMultiple_timeHour,
+            opts.allowMultiple_all || opts.allowMultiple_dom,
+            opts.allowMultiple_all || opts.allowMultiple_month,
+            opts.allowMultiple_all || opts.allowMultiple_dow
         ];
 
         for (var i = 0; i < d.length; i++) {
@@ -246,8 +246,8 @@
                 if (d[0].indexOf(",") >= 0) { // multi-val minute
                     // when t == "hour", minutes refer to minutes past the hour
                     // else, minutes refer to timeMinute
-                    if ((t == "hour" && !o.allowMultiple_minute) 
-                        || (t != "hour" && !o.allowMultiple_timeMinute)) {
+                    if ((t == "hour" && !opts.allowMultiple_minute) 
+                        || (t != "hour" && !opts.allowMultiple_timeMinute)) {
                         $.error("cron: unexpected multi-value cron entry");
                         return undefined;
                     }
